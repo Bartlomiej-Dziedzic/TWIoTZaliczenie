@@ -1,123 +1,94 @@
-import Controller from '../interfaces/controller.interface';
-import { Request, Response, NextFunction, Router } from 'express';
-
-let testArr = [4,5,6,3,5,3,7,5,13,5,6,4,3,6,3,6];
+import Controller from "../interfaces/controller.interface";
+import { Request, Response, NextFunction, Router } from "express";
+import { checkIdParam } from "../middlewares/deviceIdParam.middleware";
+import DataService from "../modules/services/data.service";
+import { config } from "../config";
 
 class DataController implements Controller {
-    public path = '/api/data';
+    public path = "/api/data";
     public router = Router();
- 
+    public dataService = new DataService();
+
     constructor() {
         this.initializeRoutes();
     }
- 
+
     private initializeRoutes() {
+        this.router.get(`${this.path}/:id/latest`, checkIdParam, this.getLatestDeviceData);
         this.router.get(`${this.path}/latest`, this.getLatestReadingsFromAllDevices);
-        this.router.get(`${this.path}/:id`, this.getNumberById);
-        this.router.get(`${this.path}/:id/latest`, this.getLargestNumber);
-        this.router.get(`${this.path}/:id/:num`, this.getLastElementsOfArray);
-        this.router.post(`${this.path}/:id`, this.addData);
-        this.router.delete(`${this.path}/all`, this.deleteAllElements)
-        this.router.delete(`${this.path}/:id`, this.deleteElement)
+        this.router.get(`${this.path}/:id`, checkIdParam, this.getAllDeviceData);
+        this.router.post(`${this.path}/:id`, checkIdParam, this.addData);
+        this.router.delete(`${this.path}/:id`, checkIdParam, this.cleanDeviceData);
+        this.router.delete(`${this.path}/all`, this.cleanAllDevices);
     }
- 
+
+    private getLatestDeviceData = async (request: Request, response: Response) => {
+        const { id } = request.params;
+        try {
+            const data = await this.dataService.get(id);
+            if (!data) {
+                return response.status(404).json({ message: "No data from this device" });
+            }
+            response.status(200).json(data);
+        } catch (error: any) {
+            response.status(500).json({ error: error.message });
+        }
+    };
+
     private getLatestReadingsFromAllDevices = async (request: Request, response: Response) => {
-        response.json(testArr);
-    }
+        try {
+            const data = await this.dataService.getAllNewest();
+            response.status(200).json(data);
+        } catch (error: any) {
+            response.status(500).json({ error: error.message });
+        }
+    };
 
-    private getNumberById = async (request: Request, response: Response) => {
-        const { id } = request.params
-        const index = Number(id)-1
-        if(isNaN(index))
-        {
-            response.status(400).send("ID must be a number");
-            return;
-        }
-        else if(index < 0)
-        {
-            response.status(400).send("ID must be larger than 1");
-            return;
-        }
-        else if(index >= testArr.length)
-        {
-            response.status(400).send("ID is bigger than array length");
-            return;
-        }
-        else
-        {
-            response.json(testArr[index]);
-            return;
-        }
-    }
-
-    private getLargestNumber = async (request: Request, response: Response) => {
-        const sortedArray = [...testArr].sort((a, b) => a < b ? 1:-1)
-        response.json(sortedArray[0])
-    }
-
-    private getLastElementsOfArray = async (request: Request, response: Response) => {
-        const { id, num } = request.params;
-        const count = Number(num);
-        if (isNaN(count) || count <= 0) 
-        {
-            response.status(400).send("Invalid number of elements requested.");
-            return;
-        }
-        if (count > testArr.length) 
-        {
-            response.status(400).send("Requested more elements than available.");
-            return;
-        }
-        const result = testArr.slice(-count);
-        response.json(result);
-    }
+    private getAllDeviceData = async (request: Request, response: Response) => {
+        const { id } = request.params;
+        const data = await this.dataService.query(id);
+        response.status(200).json(data);
+    };
 
     private addData = async (request: Request, response: Response) => {
-        const { id } = request.params
-        const { elem } = request.body
-        if(isNaN(elem))
-        {
-            response.status(400).send("Must be a number")
-        }
-        else
-        {
-            testArr.push(elem)
-            response.status(200).send("Added element")
-        }
-        
-    }
+        const { air } = request.body;
+        const { id } = request.params;
 
-    private deleteAllElements = async (request: Request, response: Response) => {
-        testArr = []
-        response.status(200).send("Deleted all elements")
-    }
+        const data = {
+            temperature: air[0].value,
+            pressure: air[1].value,
+            humidity: air[2].value,
+            deviceId: Number(id),
+            readingDate: new Date(),
+        };
 
-    private deleteElement = async (request: Request, response: Response) => {
-        const { id } = request.params
-        const index = Number(id)-1
-        if(isNaN(index))
-        {
-            response.status(400).send("ID must be a number");
-            return;
+        try {
+            await this.dataService.createData(data);
+            response.status(200).json(data);
+        } catch (error) {
+            console.error(`Validation Error: ${error.message}`);
+            response.status(400).json({ error: "Invalid input data." });
         }
-        else if(index < 0)
-        {
-            response.status(400).send("ID must be larger than 1");
-            return;
+    };
+
+    private cleanDeviceData = async (request: Request, response: Response) => {
+        const { id } = request.params;
+        try {
+            const result = await this.dataService.deleteData(id);
+            response.status(200).json({ message: "Device data deleted.", result });
+        } catch (error: any) {
+            response.status(500).json({ error: error.message });
         }
-        else if(index >= testArr.length)
-        {
-            response.status(400).send("ID is bigger than array length");
-            return;
+    };
+
+    private cleanAllDevices = async (request: Request, response: Response) => {
+        try {
+            const results = await Promise.all(Array.from({ length: config.supportedDevicesNum }, (_, i) => this.dataService.deleteData(i.toString())));
+            response.status(200).json({ message: "All device data deleted", results });
+        } catch (error: any) {
+            response.status(500).json({ error: error.message });
         }
-        else
-        {
-            testArr.splice(index, 1);
-            response.status(200).send("Deleted element successfully");
-            return;
-        }
-    }
- }
- 
- export default DataController;
- 
+    };
+}
+
+export default DataController;
