@@ -24,7 +24,10 @@ export default class DataService {
 
     public async get(deviceId: string) {
         try {
-            const newest = await DataModel.find({ deviceId: deviceId }, { __v: 0, _id: 0 }).sort({ $natural: -1 }).limit(1);
+            const newest = await DataModel.find({ deviceId: Number(deviceId) }, { __v: 0, _id: 0 })
+                .sort({ $natural: -1 })
+                .limit(1);
+            console.log("Searching for deviceId:", Number(deviceId));
             return newest[0] || null;
         } catch (error) {
             throw new Error(`Something went wrong while getting data: ${error}`);

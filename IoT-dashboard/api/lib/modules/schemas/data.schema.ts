@@ -9,4 +9,4 @@ export const DataSchema: Schema = new Schema({
     deviceId: { type: Number, required: true },
 });
 
-export default model<IData>("Params", DataSchema);
+export default model<IData>("params", DataSchema);
