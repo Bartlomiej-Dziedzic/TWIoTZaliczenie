@@ -8,9 +8,8 @@ import Joi from "joi";
 class DataController implements Controller {
     public path = "/api/data";
     public router = Router();
-    public dataService = new DataService();
 
-    constructor() {
+    constructor(private dataService: DataService) {
         this.initializeRoutes();
     }
 

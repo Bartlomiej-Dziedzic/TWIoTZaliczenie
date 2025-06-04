@@ -9,11 +9,7 @@ import TokenService from "../modules/services/token.service";
 class UserController implements Controller {
     public path = "/api/user";
     public router = Router();
-    private userService = new UserService();
-    private passwordService = new PasswordService();
-    private tokenService = new TokenService();
-
-    constructor() {
+    constructor(private userService: UserService, private passwordService: PasswordService, private tokenService: TokenService) {
         this.initializeRoutes();
     }
 
